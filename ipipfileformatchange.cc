@@ -14,20 +14,29 @@
 #define SEPARATOR ","
 #define _IP_MARK "."
 
-/* 共计 2920757 条数据，364M 大小 */
-#define FILE_NAME_PATH "./ipip.csv" 
-/*  直接合并 203577条 ip 段 ,转换完毕后变为 296246 */
-#define FILE_OUT_PATH "./iproute.csv"
+/* ipip 库 共计 2920757 条数据，364M 大小 
+直接合并第一次变为 203577条 ip 段 , ip 段展开为 cidr 完毕后变为 296246 条*/
+
 static uint32_t test_merge_num = 0;
 static uint32_t test_zhankai_num = 0;
 using namespace std;  
 typedef struct ChangeInfo {
     in_addr_t begin_int_ipaddr;
     in_addr_t end_int_ipaddr;
+    string country;
     string cidr;
     string isp;
-    string country;
-}ChangeInfo_t;
+    string cN;
+}DataInfo_t;
+
+static bool isValidMask(unsigned int mask)
+{
+    mask = ~mask + 1;
+    if ((mask & (mask - 1)) == 0)//判断是否W为2^n次方
+        return true;
+    else
+        return false;
+}
 
 class IPIPFileFormatChange {
     public:
@@ -39,15 +48,20 @@ class IPIPFileFormatChange {
         in_addr_t netmask(int prefix);
         in_addr_t Ip2Int(const string & strIP);
         string Int2Ip(uint32_t num);
-        void AddLine(ChangeInfo_t & line_info);
-        void IpRange2Cidr(ChangeInfo_t src_info);
+        void AddLine(DataInfo_t & line_info);
+        void IpRange2Cidr(DataInfo_t src_info);
         void IpRange2Cidr(in_addr_t begin_addr, in_addr_t end_addr);
-        void Write2DstFile(fstream &out_file, vector<ChangeInfo_t> & file_block, uint32_t write_line_len);
+        void Write2DstFile(fstream &out_file, vector<DataInfo_t> & file_block, uint32_t write_line_len);
         void Flush2DstFile();
 
-        ChangeInfo_t cache_info_;
+        /* 第一次合并的 缓存，即 cN,isp 一致，且 ip 连续的都合并 */
+        DataInfo_t cache_info_;
+        /* 第二次待合并的缓存区,country 字段为 China, 
+            未超过 /16 子网 内的 country字段为其他, 直到超出/16,
+            或者再次碰到country 字段为 China 释放 */
+        vector<DataInfo_t> cN_buffer_;
         /* 在本场景中，此缓存意义不大，但无多少影响，暂时保留使用 */
-        vector<ChangeInfo_t> file_block_;
+        vector<DataInfo_t> file_block_;
         fstream out_file_;
 };
 
@@ -105,7 +119,7 @@ string IPIPFileFormatChange::Int2Ip(uint32_t num)
 
     return strRet;  
 } 
-void IPIPFileFormatChange::AddLine(ChangeInfo_t & line_info){
+void IPIPFileFormatChange::AddLine(DataInfo_t & line_info){
     /* 到达 BLOCK_SIZE 长度则写入文件 */
     if(file_block_.size() == BLOCK_SIZE){
         Write2DstFile(out_file_, file_block_, BLOCK_SIZE); 
@@ -114,10 +128,10 @@ void IPIPFileFormatChange::AddLine(ChangeInfo_t & line_info){
     file_block_.push_back(line_info);
 }
 
-void IPIPFileFormatChange::IpRange2Cidr(ChangeInfo_t src_info) {
+void IPIPFileFormatChange::IpRange2Cidr(DataInfo_t src_info) {
 	int prefix;
 	in_addr_t brdcst, mask;
-    ChangeInfo_t new_info;
+    DataInfo_t new_info;
     stringstream cidr_str;
     in_addr_t begin_addr = src_info.begin_int_ipaddr;
     in_addr_t end_addr = src_info.end_int_ipaddr;
@@ -142,7 +156,7 @@ void IPIPFileFormatChange::IpRange2Cidr(ChangeInfo_t src_info) {
 
         new_info.isp = src_info.isp;
 
-        new_info.country = src_info.country;
+        new_info.cN = src_info.cN;
 
         /* 增加条目 */
         AddLine(new_info);
@@ -179,8 +193,8 @@ void IPIPFileFormatChange::IpRange2Cidr(in_addr_t begin_addr, in_addr_t end_addr
 	} while(begin_addr <= end_addr);
 }
 
-void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<ChangeInfo_t>& file_block, uint32_t write_line_len){
-    std::vector<ChangeInfo_t>::iterator it;
+void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<DataInfo_t>& file_block, uint32_t write_line_len){
+    std::vector<DataInfo_t>::iterator it;
     for( it = file_block.begin(); it != file_block.end();) {
         /* 将纯大写的中国运营商改为首先大写的样式 */
         if((*it).isp == "CHINATELECOM") {
@@ -198,7 +212,6 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<ChangeInfo_t>
         }
 
         /* 运营商修改，将符合标准的运营商修改为 BGP */
-        // cout<<"运营商："<<(*it).isp<<endl<<"###"<<(*it).isp.rfind(".cn")<<endl;
         if((*it).isp.rfind("ALIYUN") != string::npos ||
             (*it).isp.rfind(".cn") != string::npos ||
             (*it).isp.rfind(".org") != string::npos ||
@@ -209,8 +222,8 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<ChangeInfo_t>
         }
         
         /* 国家为 中国和香港，且运营商为*的 都将运行商改为BGP */
-        if(((*it).country == "CN" ||
-        (*it).country == "HK") &&
+        if(((*it).cN == "CN" ||
+        (*it).cN == "HK") &&
         (*it).isp == "*") {
             (*it).isp = "BGP";
         }
@@ -218,7 +231,7 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<ChangeInfo_t>
         // <<Int2Ip((*it).begin_int_ipaddr)<<"\t"
         // <<Int2Ip((*it).end_int_ipaddr)<<"\t"
         // <<(*it).isp<<"\t"
-        // <<(*it).country<<"\r\n";
+        // <<(*it).cN<<"\r\n";
 
         out_file
         // <<Int2Ip((*it).begin_int_ipaddr)<<SEPARATOR
@@ -227,7 +240,7 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<ChangeInfo_t>
         // <<(*it).end_int_ipaddr<<SEPARATOR
         <<(*it).cidr<<SEPARATOR
         <<(*it).isp<<SEPARATOR
-        <<(*it).country<<"\r\n";
+        <<(*it).cN<<"\r\n";
 
         // out_file
         // <<"\""<<Int2Ip((*it).begin_int_ipaddr)<<"\""<<SEPARATOR
@@ -236,7 +249,7 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<ChangeInfo_t>
         // <<"\""<<(*it).end_int_ipaddr<<"\""<<SEPARATOR
         // // <<"\""<<(*it).cidr<<"\""<<SEPARATOR
         // // <<"\""<<(*it).isp<<"\""<<SEPARATOR
-        // <<"\""<<(*it).country<<"\""<<"\r\n";
+        // <<"\""<<(*it).cN<<"\""<<"\r\n";
 
         file_block.erase(it);
     }
@@ -253,7 +266,7 @@ void IPIPFileFormatChange::HandleInfo(string& line)
     int nEPos = 0;
     /* 字段序号以0开始 */
     int field_index = 0; 
-    ChangeInfo_t curr_cache_info_;
+    DataInfo_t curr_cache_info;
     string str;
     while ((nEPos = line.find('\t', nSPos)) != string::npos) {
         str = line.substr(nSPos, nEPos - nSPos);
@@ -261,47 +274,51 @@ void IPIPFileFormatChange::HandleInfo(string& line)
         /* 提取自己关注的字段 */
         switch (field_index){
             case 0:
-                curr_cache_info_.begin_int_ipaddr = Ip2Int(str);
+                curr_cache_info.begin_int_ipaddr = Ip2Int(str);
                 break;
             case 1:
-                curr_cache_info_.end_int_ipaddr = Ip2Int(str);
+                curr_cache_info.end_int_ipaddr = Ip2Int(str);
+                break;
+            case 2:
+                curr_cache_info.country = str;
                 break;
             case 6:
-                curr_cache_info_.isp = str;
+                curr_cache_info.isp = str;
                 break;
             case 13:
-                curr_cache_info_.country = str;
+                curr_cache_info.cN = str;
                 break;
             default:
                 break;
         }
-
         field_index++;
     }
-
+    if(curr_cache_info.country == "114DNS.COM" || curr_cache_info.country == "ALIDNS"){
+        curr_cache_info.cN = "CN";
+    }
     /* 读取最后一个字段,暂时不需要最后一个字段 */
     // str = line.substr(nSPos, line.size() - nSPos);
     // cout << str <<endl;  
 
     /* 如果是第一个数据，仅刷新缓存 */
-    if(cache_info_.country == ""){
-        cache_info_ = curr_cache_info_;
+    if(cache_info_.cN == ""){
+        cache_info_ = curr_cache_info;
         return;
     }
      /* 如果 运营商和国家一致，且当前起始 ip 与 上一条缓存 终止 ip 连续（差值为1），则合并 */
-    if(curr_cache_info_.isp == cache_info_.isp &&
-    curr_cache_info_.country == cache_info_.country &&
-    (curr_cache_info_.begin_int_ipaddr - cache_info_.end_int_ipaddr == 1)) {
+    if(curr_cache_info.isp == cache_info_.isp &&
+    curr_cache_info.cN == cache_info_.cN &&
+    (curr_cache_info.begin_int_ipaddr - cache_info_.end_int_ipaddr == 1)) {
         /* 将当前的信息合并进 file_block */
-        cache_info_.end_int_ipaddr = curr_cache_info_.end_int_ipaddr;
+        cache_info_.end_int_ipaddr = curr_cache_info.end_int_ipaddr;
         test_merge_num++;
     }else{
         /* 缓存写入 file_block_ */
         IpRange2Cidr(cache_info_);
         // AddLine(cache_info_);
-        
+
         /* 刷新缓存数据*/
-        cache_info_ = curr_cache_info_;
+        cache_info_ = curr_cache_info;
     }
 
     return;
