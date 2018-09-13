@@ -221,6 +221,7 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<DataInfo_t>& 
         // }
         /* 运营商修改，将符合标准的运营商修改为 BGP */
         if((*it).isp.rfind("ALIYUN") != string::npos ||
+            (*it).isp.rfind("TENCENT") != string::npos ||
             (*it).isp.rfind(".cn") != string::npos ||
             (*it).isp.rfind(".org") != string::npos ||
             (*it).isp.rfind(".net") != string::npos ||
@@ -301,7 +302,8 @@ void IPIPFileFormatChange::HandleInfo(string& line)
         }
         field_index++;
     }
-    if(curr_cache_info.country == "114DNS.COM" || curr_cache_info.country == "ALIDNS"){
+    if(curr_cache_info.country == "114DNS.COM" || curr_cache_info.country == "ALIDNS.COM"
+        || curr_cache_info.country == "TENCENT.COM" || curr_cache_info.country == "DNSPOD.COM"){
         curr_cache_info.cN = "CN";
     }
     /* 读取最后一个字段,暂时不需要最后一个字段 */
