@@ -197,20 +197,28 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<DataInfo_t>& 
     std::vector<DataInfo_t>::iterator it;
     for( it = file_block.begin(); it != file_block.end();) {
         /* 将纯大写的中国运营商改为首先大写的样式 */
+        transform((*it).isp.begin(), (*it).isp.end(), (*it).isp.begin(), towupper);
         if((*it).isp == "CHINATELECOM") {
-            transform((*it).isp.begin(), (*it).isp.end(), (*it).isp.begin(), towlower);
-            (*it).isp.replace(0,1,"C");
-            (*it).isp.replace(5,1,"T");
-        } else if((*it).isp == "CHINAUNICOM"){
-            transform((*it).isp.begin(), (*it).isp.end(), (*it).isp.begin(), towlower);
-            (*it).isp.replace(0,1,"C");
-            (*it).isp.replace(5,1,"U");
-        } else if ((*it).isp == "CHINAMOBILE"){
-            transform((*it).isp.begin(), (*it).isp.end(), (*it).isp.begin(), towlower);
-            (*it).isp.replace(0,1,"C");
-            (*it).isp.replace(5,1,"M");            
+            (*it).isp = "ctn";
+        } else if((*it).isp == "CHINAUNICOM" || (*it).isp == "WASU"){
+            (*it).isp = "cun";
+        } else if ((*it).isp == "CHINAMOBILE" || (*it).isp == "CHINARAILCOM"){
+            (*it).isp = "cmn";         
         }
 
+        // if((*it).isp == "CHINATELECOM") {
+        //     transform((*it).isp.begin(), (*it).isp.end(), (*it).isp.begin(), towlower);
+        //     (*it).isp.replace(0,1,"C");
+        //     (*it).isp.replace(5,1,"T");
+        // } else if((*it).isp == "CHINAUNICOM"){
+        //     transform((*it).isp.begin(), (*it).isp.end(), (*it).isp.begin(), towlower);
+        //     (*it).isp.replace(0,1,"C");
+        //     (*it).isp.replace(5,1,"U");
+        // } else if ((*it).isp == "CHINAMOBILE"){
+        //     transform((*it).isp.begin(), (*it).isp.end(), (*it).isp.begin(), towlower);
+        //     (*it).isp.replace(0,1,"C");
+        //     (*it).isp.replace(5,1,"M");            
+        // }
         /* 运营商修改，将符合标准的运营商修改为 BGP */
         if((*it).isp.rfind("ALIYUN") != string::npos ||
             (*it).isp.rfind(".cn") != string::npos ||
@@ -262,7 +270,7 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<DataInfo_t>& 
 
 void IPIPFileFormatChange::HandleInfo(string& line)  
 {  
-    int nSPos = 0; 
+    int nSPos = 0;  
     int nEPos = 0;
     /* 字段序号以0开始 */
     int field_index = 0; 
