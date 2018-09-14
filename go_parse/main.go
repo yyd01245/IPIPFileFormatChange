@@ -3,8 +3,9 @@ package main
 import (
 	"fmt"
 	"strings"
-	// "strconv"
+	"strconv"
 	// "./csv"
+	"io"
 	"os"
 	log "github.com/Sirupsen/logrus"
 	cm "github.com/yyd01245/go_common/common"
@@ -253,13 +254,477 @@ func (this *IPIPExchange) Exchange2X() {
 	log.Infof("---- total: len = %v",total)
 }
 
+func (this *IPIPExchange) ExchangeIPIP() {
+	// 读取文件
+	inFile, err := os.OpenFile(this.InFile,os.O_RDONLY,0644)
+	if err != nil {
+		log.Warnf("open file failed !")
+		return
+	}
+	defer inFile.Close()
+	// 创建输出文件
+	file, err := os.OpenFile(this.OutFile,os.O_CREATE|os.O_TRUNC|os.O_WRONLY,0644)
+	if err != nil {
+		log.Warnf("open file failed !")
+		return
+	}
+	defer file.Close()
+	csvWriter := csv.NewWriter(file)
+
+	fileCN, err := os.OpenFile("china_geoip.csv",os.O_CREATE|os.O_TRUNC|os.O_WRONLY,0644)
+	if err != nil {
+		log.Warnf("open file failed !")
+		return
+	}
+	defer fileCN.Close()
+	csvCNWriter := csv.NewWriter(fileCN)
+
+	csvReader := csv.NewReader(inFile)
+
+	// stringBody := string(body)
+	// // 获取一行行数据
+	// outLine := strings.Split(stringBody,"\n")
+	total := 0
+	for  {
+		record,err := csvReader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Errorf("read csv line error: %v",err)
+			continue
+		}
+		log.Debugf("--- get data: %v,len=%d",record,len(record))
+		log.Debugf("record 0=%s",record[0])
+		data := strings.Split(record[0],"\t")
+		// log.Infof("data-=%v,len=%d",data,len(data))
+		// 行数据
+		if len(data) != 15 {
+			log.Errorf("data:%v, len=%d, is wrong!",data,len(data))
+			continue
+		}
+		startIPstr := data[0]
+		endIPstr := data[1]
+		dotIPIntList := strings.Split(startIPstr,".")
+		dotEndIPIntList := strings.Split(endIPstr,".")
+		log.Debugf("--- dotstart:%v,endStart:%v",dotIPIntList,dotEndIPIntList)
+		intStartIP := []string{}
+		intEndIP := []string{}
+		for _,v := range dotIPIntList {
+			a,err := strconv.Atoi(v)
+			if err != nil {
+				continue
+			}
+			intStartIP = append(intStartIP,strconv.Itoa(a))
+			log.Debugf("get start int : %d",a)
+		}
+		for _,v := range dotEndIPIntList {
+			a,_ := strconv.Atoi(v)
+			if err != nil {
+				continue
+			}
+			intEndIP = append(intEndIP,strconv.Itoa(a))
+			log.Debugf("get end int : %d",a)
+		}		
+		log.Debugf("intStartIP=%v,len=%d",intStartIP,len(intStartIP))
+		log.Debugf("intEndIP=%v,len=%d",intEndIP,len(intEndIP))
+
+		if len(intStartIP) != 4 || len(intEndIP) != 4 {
+			log.Errorf("error ip:start=%v,end=%v",dotIPIntList,dotEndIPIntList)
+		}
+		// break;
+		startIP := strings.Join(intStartIP,".")
+		endIP := strings.Join(intEndIP,".")
+		total++
+		// if total > 20 {
+		// 	break;
+		// }
+		// 得到国家
+		country := data[2]
+		isp := data[6]
+		countryCode := data[13]
+		start_local_id := cm.InetAtoN(startIP)
+		end_local_id := cm.InetAtoN(endIP)
+
+		if country == "114DNS.COM" || 
+			country == "ALIDNS.COM" || country == "TENCENT.COM" || 
+			country == "DNSPOD.COM" || country == "CHINANETCENTER.COM" ||
+			country == "SDNS.CN" {
+				country = "China"
+				countryCode = "CN"
+			}
+		if country == "China" && countryCode == "CN"{
+				// country = "China"
+				// countryCode = "CN"
+				chinaCountry := ""
+				chinaCountryCode := countryCode
+				// 区分运营商
+				localISP := strings.ToUpper(isp)
+				if localISP == "CHINATELECOM" {
+					// isp = ""
+					chinaCountry = "ChinaCTN"
+					chinaCountryCode = "XT"
+				}else if localISP == "CHINAUNICOM" || localISP == "WASU" {
+					// isp = ""
+					chinaCountry = "ChinaCUN"
+					chinaCountryCode = "XU"
+				}else if localISP == "CHINAMOBILE" || localISP == "CHINARAILCOM" {
+					// isp = ""
+					chinaCountry = "ChinaCMN"
+					chinaCountryCode = "XM"
+				}else {
+					// if strings.Index(isp,"ALIYUN") >= 0 ||
+					// strings.Index(isp,"TENCENT") >= 0 ||
+					// strings.Index(isp,".cn") >= 0 ||
+					// strings.Index(isp,".org") >= 0 ||
+					// strings.Index(isp,".net") >= 0 ||
+					// strings.Index(isp,".com") >= 0 
+						chinaCountry = "ChinaBGP"
+						chinaCountryCode = "XB"
+				}
+				outCNCsv := []string{"\"%s\"","\"%s\"","\"%d\"","\"%d\"","\"%s\"","\"%s\""}
+				outCNCsv[0] = fmt.Sprintf("\"%s\"",startIP)
+				outCNCsv[1] = fmt.Sprintf("\"%s\"",endIP)
+				outCNCsv[2] = fmt.Sprintf("\"%d\"",start_local_id)
+				outCNCsv[3] = fmt.Sprintf("\"%d\"",end_local_id)
+				outCNCsv[4] = fmt.Sprintf("\"%s\"",chinaCountryCode)
+				outCNCsv[5] = fmt.Sprintf("\"%s\"",chinaCountry)
+				err = csvCNWriter.Write(outCNCsv)
+				if err != nil {
+					log.Errorf("write line to %v, line:%v","china_geoip.csv",outCNCsv) 
+				}
+				log.Infof("get china country:%v",outCNCsv)
+
+				csvCNWriter.Flush()
+		}
+		if country == "Asia Pacific Regions" && countryCode == "*" {
+			countryCode = "HK"
+		}
+		if countryCode == "*" {  
+			// country == "*" && 
+			// 未知国家归入 XX
+			countryCode = "XX"
+
+		}
+		outCsv := []string{"\"%s\"","\"%s\"","\"%d\"","\"%d\"","\"%s\"","\"%s\""}
+		outCsv[0] = fmt.Sprintf("\"%s\"",startIP)
+		outCsv[1] = fmt.Sprintf("\"%s\"",endIP)
+		outCsv[2] = fmt.Sprintf("\"%d\"",start_local_id)
+		outCsv[3] = fmt.Sprintf("\"%d\"",end_local_id)
+		outCsv[4] = fmt.Sprintf("\"%s\"",countryCode)
+		outCsv[5] = fmt.Sprintf("\"%s\"",country)
+		err = csvWriter.Write(outCsv)
+		if err != nil {
+			log.Errorf("write line to %v, line:%v",this.OutFile,outCsv) 
+		}
+		csvWriter.Flush()
+		log.Infof("get global country:%v",outCsv)
+
+
+
+	}
+	// log.Infof("---- over: total len= %d",total)
+	csvWriter.Flush()
+	csvCNWriter.Flush()
+	log.Errorf("---- total: len = %v",total)
+}
+
+func (this *IPIPExchange) CheckIPIPGlobal() {
+	// 读取原始文件
+	inFile, err := os.OpenFile(this.InFile,os.O_RDONLY,0644)
+	if err != nil {
+		log.Warnf("open file failed !")
+		return
+	}
+	defer inFile.Close()
+	// 读取对比的文件
+	file, err := os.OpenFile(this.OutFile,os.O_RDONLY,0644)
+	if err != nil {
+		log.Warnf("open file failed !")
+		return
+	}
+	defer file.Close()
+	csvComperReader := csv.NewReader(file)
+	csvReader := csv.NewReader(inFile)
+
+	allComper,err := csvComperReader.ReadAll()
+	if err != nil {
+		log.Errorf("read compare csv error: %v",err)
+		return
+	}
+	// stringBody := string(body)
+	// // 获取一行行数据
+	// outLine := strings.Split(stringBody,"\n")
+	total := 0
+	lastUnMatchList := []string{}
+	for  {
+		record,err := csvReader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Errorf("read csv line error: %v",err)
+			continue
+		}
+		log.Debugf("--- get data: %v,len=%d",record,len(record))
+		log.Debugf("record 0=%s",record[0])
+		data := strings.Split(record[0],"\t")
+		// log.Infof("data-=%v,len=%d",data,len(data))
+		// 行数据
+		// if len(data) != 15 {
+		// 	log.Errorf("data:%v, len=%d, is wrong!",data,len(data))
+		// 	continue
+		// }
+		startIPstr := data[0]
+		endIPstr := data[1]
+		dotIPIntList := strings.Split(startIPstr,".")
+		dotEndIPIntList := strings.Split(endIPstr,".")
+		log.Debugf("--- dotstart:%v,endStart:%v",dotIPIntList,dotEndIPIntList)
+		intStartIP := []string{}
+		intEndIP := []string{}
+		for _,v := range dotIPIntList {
+			a,err := strconv.Atoi(v)
+			if err != nil {
+				continue
+			}
+			intStartIP = append(intStartIP,strconv.Itoa(a))
+			log.Debugf("get start int : %d",a)
+		}
+		for _,v := range dotEndIPIntList {
+			a,_ := strconv.Atoi(v)
+			if err != nil {
+				continue
+			}
+			intEndIP = append(intEndIP,strconv.Itoa(a))
+			log.Debugf("get end int : %d",a)
+		}		
+		log.Debugf("intStartIP=%v,len=%d",intStartIP,len(intStartIP))
+		log.Debugf("intEndIP=%v,len=%d",intEndIP,len(intEndIP))
+
+		if len(intStartIP) != 4 || len(intEndIP) != 4 {
+			log.Errorf("error ip:start=%v,end=%v",dotIPIntList,dotEndIPIntList)
+		}
+		// break;
+		startIP := strings.Join(intStartIP,".")
+		endIP := strings.Join(intEndIP,".")
+		total++
+		// if total > 20 {
+		// 	break;
+		// }
+		// 得到国家
+		country := data[2]
+		// isp := data[6]
+		countryCode := data[13]
+		start_local_id := cm.InetAtoN(startIP)
+		end_local_id := cm.InetAtoN(endIP)
+		if country == "114DNS.COM" || 
+			country == "ALIDNS.COM" || country == "TENCENT.COM" || 
+			country == "DNSPOD.COM" || country == "CHINANETCENTER.COM" ||
+			country == "SDNS.CN" {
+				country = "China"
+				countryCode = "CN"
+		}
+		if country == "Asia Pacific Regions" && countryCode == "*" {
+			countryCode = "HK"
+		}
+		if countryCode == "*" {  
+			// country == "*" && 
+			// 未知国家归入 XX
+			countryCode = "XX"
+
+		}
+		findFlag := false
+		for index, value := range allComper {
+			log.Infof("---index=%d,value=%v",index,value)
+			if len(value) != 6 {
+				log.Errorf("compare file line len!=6, value=%v,len=%d!!!",value,len(value))
+			}
+			// data := strings.Split(value,"\t")
+			startID,_ :=strconv.Atoi(value[2])
+			endID,_ :=strconv.Atoi(value[3])
+			if value[0]==startIP && value[1]==endIP && int64(startID)==start_local_id &&
+				int64(endID) == end_local_id && value[4] == countryCode && value[5] == country {
+					log.Infof("find line in compare file:%v",value)
+					allComper = append(allComper[:index],allComper[index+1:]...)
+					findFlag = true
+					break;
+			}
+		}
+		if findFlag == false {
+			lastUnMatchList = append(lastUnMatchList,record[0])
+		}
+		// break
+	}
+
+	log.Errorf("commpare file last : %v,len=%d!",allComper,len(allComper))
+	log.Errorf("---org file  diff: %v,len=%d!",lastUnMatchList,len(lastUnMatchList))
+
+	log.Errorf("---- total: len = %v",total)
+}
+func (this *IPIPExchange) CheckIPIPChina() {
+	// 读取原始文件
+	inFile, err := os.OpenFile(this.InFile,os.O_RDONLY,0644)
+	if err != nil {
+		log.Warnf("open file failed !")
+		return
+	}
+	defer inFile.Close()
+	// 读取对比的文件
+	file, err := os.OpenFile(this.OutFile,os.O_RDONLY,0644)
+	if err != nil {
+		log.Warnf("open file failed !")
+		return
+	}
+	defer file.Close()
+	csvComperReader := csv.NewReader(file)
+	csvReader := csv.NewReader(inFile)
+
+	allComper,err := csvComperReader.ReadAll()
+	if err != nil {
+		log.Errorf("read compare csv error: %v",err)
+		return
+	}
+	// stringBody := string(body)
+	// // 获取一行行数据
+	// outLine := strings.Split(stringBody,"\n")
+	total := 0
+	lastUnMatchList := []string{}
+	for  {
+		record,err := csvReader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Errorf("read csv line error: %v",err)
+			continue
+		}
+		log.Debugf("--- get data: %v,len=%d",record,len(record))
+		log.Debugf("record 0=%s",record[0])
+		data := strings.Split(record[0],"\t")
+		// log.Infof("data-=%v,len=%d",data,len(data))
+		// 行数据
+		// if len(data) != 15 {
+		// 	log.Errorf("data:%v, len=%d, is wrong!",data,len(data))
+		// 	continue
+		// }
+		startIPstr := data[0]
+		endIPstr := data[1]
+		dotIPIntList := strings.Split(startIPstr,".")
+		dotEndIPIntList := strings.Split(endIPstr,".")
+		log.Debugf("--- dotstart:%v,endStart:%v",dotIPIntList,dotEndIPIntList)
+		intStartIP := []string{}
+		intEndIP := []string{}
+		for _,v := range dotIPIntList {
+			a,err := strconv.Atoi(v)
+			if err != nil {
+				continue
+			}
+			intStartIP = append(intStartIP,strconv.Itoa(a))
+			log.Debugf("get start int : %d",a)
+		}
+		for _,v := range dotEndIPIntList {
+			a,_ := strconv.Atoi(v)
+			if err != nil {
+				continue
+			}
+			intEndIP = append(intEndIP,strconv.Itoa(a))
+			log.Debugf("get end int : %d",a)
+		}		
+		log.Debugf("intStartIP=%v,len=%d",intStartIP,len(intStartIP))
+		log.Debugf("intEndIP=%v,len=%d",intEndIP,len(intEndIP))
+
+		if len(intStartIP) != 4 || len(intEndIP) != 4 {
+			log.Errorf("error ip:start=%v,end=%v",dotIPIntList,dotEndIPIntList)
+		}
+		// break;
+		startIP := strings.Join(intStartIP,".")
+		endIP := strings.Join(intEndIP,".")
+		total++
+		// if total > 20 {
+		// 	break;
+		// }
+		// 得到国家
+		country := data[2]
+		isp := data[6]
+		countryCode := data[13]
+		start_local_id := cm.InetAtoN(startIP)
+		end_local_id := cm.InetAtoN(endIP)
+		if country == "114DNS.COM" || 
+			country == "ALIDNS.COM" || country == "TENCENT.COM" || 
+			country == "DNSPOD.COM" || country == "CHINANETCENTER.COM" ||
+			country == "SDNS.CN" {
+				country = "China"
+				countryCode = "CN"
+		}
+		if countryCode != "CN" {
+			continue
+		}
+		localISP := strings.ToUpper(isp)
+		if localISP == "CHINATELECOM" {
+			// isp = ""
+			country = "ChinaCTN"
+			countryCode = "XT"
+		}else if localISP == "CHINAUNICOM" || localISP == "WASU" {
+			// isp = ""
+			country = "ChinaCUN"
+			countryCode = "XU"
+		}else if localISP == "CHINAMOBILE" || localISP == "CHINARAILCOM" {
+			// isp = ""
+			country = "ChinaCMN"
+			countryCode = "XM"
+		}else {
+			// if strings.Index(isp,"ALIYUN") >= 0 ||
+			// strings.Index(isp,"TENCENT") >= 0 ||
+			// strings.Index(isp,".cn") >= 0 ||
+			// strings.Index(isp,".org") >= 0 ||
+			// strings.Index(isp,".net") >= 0 ||
+			// strings.Index(isp,".com") >= 0 
+				country = "ChinaBGP"
+				countryCode = "XB"
+		}
+		findFlag := false
+		for index, value := range allComper {
+			log.Infof("---index=%d,value=%v",index,value)
+			if len(value) != 6 {
+				log.Errorf("compare file line len!=6, value=%v,len=%d!!!",value,len(value))
+			}
+			// data := strings.Split(value,"\t")
+			startID,_ :=strconv.Atoi(value[2])
+			endID,_ :=strconv.Atoi(value[3])
+			if value[0]==startIP && value[1]==endIP && int64(startID)==start_local_id &&
+				int64(endID) == end_local_id && value[4] == countryCode && value[5] == country {
+					log.Infof("find line in compare file:%v",value)
+					allComper = append(allComper[:index],allComper[index+1:]...)
+					findFlag = true
+					break;
+			}
+		}
+		if findFlag == false {
+			lastUnMatchList = append(lastUnMatchList,record[0])
+		}
+		// break
+	}
+
+	log.Errorf("commpare file last : %v,len=%d!",allComper,len(allComper))
+	log.Errorf("---org file  diff: %v,len=%d!",lastUnMatchList,len(lastUnMatchList))
+	log.Errorf("---- total: len = %v",total)
+}
+
 func main(){
 	log.Info("----- begin -----")
 	log.Infof("opts: %v",opts)
 
 	app := NewExchange(opts.OutPut,opts.InPut,opts.Filter)
 	// app.Exchange()
-	app.Exchange2X()
+	if opts.Type == "ipmask" {
+		app.Exchange2X()
+	}else if opts.Type == "ipip" {
+		app.ExchangeIPIP()
+	}else if opts.Type == "checkglobal" {
+		app.CheckIPIPGlobal()
+	}else if opts.Type == "checkchina" {
+		app.CheckIPIPChina()
+	}
 	// switch opts.Command {
 	// 	case "ctn":
 	// 		// 提取 ctn 和 BGP 两个的数据转换

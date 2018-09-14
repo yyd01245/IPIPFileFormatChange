@@ -18,12 +18,12 @@ var opts struct {
 	LogLevel  string `short:"l" long:"log_level" default:"info" description:"log level,Valid options are: error, warn, info, debug"`
 	Command   string `short:"c" long:"command" default:"main"`
 	Filter string `short:"f" long:"filter" default:"ctn" description:"get ctn filter exchange ctn&cun"`
-	InPut	 string `input:"i" long:"input" default:"input file"`
-	OutPut	 string `input:"o" long:"output" default:"output file"`
-	GeonameID string `ID:"g" long:"id" default:"16779264"`
-	CountryCode string `ID:"d" long:"code" default:"CN"`
-	CountryName string `ID:"n" long:"name" default:"China"`
-
+	InPut	 string `short:"i" long:"input" default:"input file"`
+	OutPut	 string `short:"o" long:"output" default:"output file"`
+	GeonameID string `short:"g" long:"id" default:"16779264"`
+	CountryCode string `short:"d" long:"code" default:"CN"`
+	CountryName string `short:"n" long:"name" default:"China"`
+	Type			string `short:"t" long:"type" default:"mask" dedcription:"ipip ipmask type "`
 
 	// Path      string `short:"p" long:"path" default:"." description:"program path"`
 	// CpePath		string `short:"c" long:"cpe_path" default:"" description:"cpe file path"`

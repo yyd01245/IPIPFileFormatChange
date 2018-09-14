@@ -249,7 +249,7 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<DataInfo_t>& 
         // <<(*it).end_int_ipaddr<<SEPARATOR
         <<(*it).cidr<<SEPARATOR
         <<(*it).isp<<SEPARATOR
-        <<(*it).cN<<"\r\n";
+        <<(*it).cN<<SEPARATOR<<(*it).country<<"\r\n";
 
         // out_file
         // <<"\""<<Int2Ip((*it).begin_int_ipaddr)<<"\""<<SEPARATOR
@@ -303,8 +303,10 @@ void IPIPFileFormatChange::HandleInfo(string& line)
         field_index++;
     }
     if(curr_cache_info.country == "114DNS.COM" || curr_cache_info.country == "ALIDNS.COM"
-        || curr_cache_info.country == "TENCENT.COM" || curr_cache_info.country == "DNSPOD.COM"){
+        || curr_cache_info.country == "TENCENT.COM" || curr_cache_info.country == "DNSPOD.COM"
+        || curr_cache_info.country == "CHINANETCENTER.COM"){
         curr_cache_info.cN = "CN";
+        curr_cache_info.country = "China";
     }
     /* 读取最后一个字段,暂时不需要最后一个字段 */
     // str = line.substr(nSPos, line.size() - nSPos);
