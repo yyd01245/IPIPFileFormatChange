@@ -3,8 +3,8 @@ package main
 import (
 	"strings"
 	"time"
-	// "runtime"
-	// "fmt"
+	"runtime"
+	"fmt"
 	// "os"
 	log "github.com/Sirupsen/logrus"
 	"github.com/jessevdk/go-flags"
@@ -28,11 +28,11 @@ var opts struct {
 	// Path      string `short:"p" long:"path" default:"." description:"program path"`
 	// CpePath		string `short:"c" long:"cpe_path" default:"" description:"cpe file path"`
 }
-// func init() {
-// 	// runtime.GOMAXPROCS(runtime.NumCPU())
-// 	fmt.Println("---- init cpu init.go");
+func init() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	fmt.Println("---- init cpu init.go");
 	
-// }
+}
 func init(){
 	// _, err := flags.Parse(&opts)
 	// if err != nil {

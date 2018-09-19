@@ -1,0 +1,19 @@
+{
+  "XA":["AP","AS","AU","BN","GU","HK","ID","JP","KH","KP","KR","LA",
+      "MM","MN","MO","MY","PG","PH","PW","SG","TH","TL","TW","VN"],
+  "XE":["AD","AL","AM","AT","AX","AZ","BA","BE","BG","BY","CH","CY",
+      "CZ","DE","DK","DZ","EE","EG","EH","ES","EU","FI","FO","FR","GB",
+      "GE","GG","GI","GL","GR","HR","HU","IE","IL","IM","IS","IT","JO","LB",
+      "LI","LT","LU","LV","LY","MA","MC","MD","ME","MF","MK","MT","NL","NO",
+      "PL","PS","PT","RO","RS","RU","SE","SI","SJ","SK","SM","SY","TN","UA","VA"],
+  "XS":["AG","AI","AR","AW","BB","BL","BM","BO","BR","BS","BV","BZ","CA","CL","CO",
+      "CR","CU","CW","DM","DO","EC","GD","GF","GP","GT","GY","HN","HT","JE","JM",
+      "KN","KY","LC","MQ","MX","NI","PA","PE","PM","PR","PY","SR","SV","SX","TC",
+      "TR","TT","UM","US","UY","VC","VE","VG","VI"],
+  "XI":["AE","AF","BD","BH","BT","IN","IO","IQ","IR","KG","KW","KZ","LK","MV",
+      "NP","OM","PK","QA","SA","TJ","TM","UZ"],
+  "XF":["AO","BF","BI","BJ","BW","CD","CF","CG","CI","CM","DJ","ER","ET","GA","GH",
+      "GM","GN","GQ","GW","KE","KM","LR","LS","MG","ML","MR","MU","MW","MZ","NA",
+      "NE","NG","RE","RW","SC","SD","SL","SN","SO","SS","ST","SZ","TD","TG","TZ",
+      "UG","YE","YT","ZA","ZM","ZW"]
+}

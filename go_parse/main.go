@@ -254,6 +254,57 @@ func (this *IPIPExchange) Exchange2X() {
 	log.Infof("---- total: len = %v",total)
 }
 
+type CountryInfo struct {
+	StartIP string
+	EndIP		string
+	Country string
+	ISP     string
+	CountryCode string
+	StartLocalID int64
+	EndLocalID 	int64
+}
+
+func (this *IPIPExchange) ISCustomCountry(data *CountryInfo) bool{
+	ret := false
+	// 是否是
+	for _,v := range config.XAsia {
+		if data.CountryCode == v || (data.Country=="Asia Pacific Regions"&& data.CountryCode=="*"){
+			// 找到了
+			data.CountryCode = "XA"
+			return true
+		}
+	}
+	for _,v := range config.XEurope {
+		if data.CountryCode == v || (data.Country=="Europe Regions" && data.CountryCode=="*"){
+			// 找到了
+			data.CountryCode = "XE"
+			return true
+		}
+	}
+	for _,v := range config.XAmerica {
+		if data.CountryCode == v || (data.Country=="North America Regions" && data.CountryCode=="*"){
+			// 找到了
+			data.CountryCode = "XS"
+			return true
+		}
+	}
+	for _,v := range config.XIndia {
+		if data.CountryCode == v {
+			// 找到了
+			data.CountryCode = "XI"
+			return true
+		}
+	}
+	for _,v := range config.XAfrica {
+		if data.CountryCode == v {
+			// 找到了
+			data.CountryCode = "XF"
+			return true
+		}
+	}
+	return ret
+}
+
 func (this *IPIPExchange) ExchangeIPIP() {
 	// 读取文件
 	inFile, err := os.OpenFile(this.InFile,os.O_RDONLY,0644)
@@ -277,8 +328,16 @@ func (this *IPIPExchange) ExchangeIPIP() {
 		return
 	}
 	defer fileCN.Close()
-	csvCNWriter := csv.NewWriter(fileCN)
 
+	fileCustom, err := os.OpenFile("custom_geoip.csv",os.O_CREATE|os.O_TRUNC|os.O_WRONLY,0644)
+	if err != nil {
+		log.Warnf("open file failed !")
+		return
+	}
+	defer fileCustom.Close()
+
+	csvCNWriter := csv.NewWriter(fileCN)
+	csvCustomWriter := csv.NewWriter(fileCustom)
 	csvReader := csv.NewReader(inFile)
 
 	// stringBody := string(body)
@@ -346,10 +405,13 @@ func (this *IPIPExchange) ExchangeIPIP() {
 		start_local_id := cm.InetAtoN(startIP)
 		end_local_id := cm.InetAtoN(endIP)
 
+		if country == "LAN Address" {
+			continue
+		}
 		if country == "114DNS.COM" || 
 			country == "ALIDNS.COM" || country == "TENCENT.COM" || 
 			country == "DNSPOD.COM" || country == "CHINANETCENTER.COM" ||
-			country == "SDNS.CN" {
+			country == "SDNS.CN" || country == "KNET.CN" {
 				country = "China"
 				countryCode = "CN"
 			}
@@ -397,10 +459,38 @@ func (this *IPIPExchange) ExchangeIPIP() {
 
 				csvCNWriter.Flush()
 		}
-		if country == "Asia Pacific Regions" && countryCode == "*" {
-			countryCode = "HK"
+
+		customData := CountryInfo{
+			StartIP:	startIP,
+			EndIP:		endIP,
+			Country:	country,
+			ISP:			isp,
+			CountryCode: countryCode,
+			StartLocalID: start_local_id,
+			EndLocalID: end_local_id,
 		}
-		if countryCode == "*" {  
+		if this.ISCustomCountry(&customData) {
+			//  
+			outCNCsv := []string{"\"%s\"","\"%s\"","\"%d\"","\"%d\"","\"%s\"","\"%s\""}
+			outCNCsv[0] = fmt.Sprintf("\"%s\"",customData.StartIP)
+			outCNCsv[1] = fmt.Sprintf("\"%s\"",customData.EndIP)
+			outCNCsv[2] = fmt.Sprintf("\"%d\"",customData.StartLocalID)
+			outCNCsv[3] = fmt.Sprintf("\"%d\"",customData.EndLocalID)
+			outCNCsv[4] = fmt.Sprintf("\"%s\"",customData.CountryCode)
+			outCNCsv[5] = fmt.Sprintf("\"%s\"",customData.Country)
+			err = csvCustomWriter.Write(outCNCsv)
+			if err != nil {
+				log.Errorf("write line to %v, line:%v","china_geoip.csv",outCNCsv) 
+			}
+			log.Infof("get china country:%v",outCNCsv)
+
+			csvCustomWriter.Flush()
+		}
+		// if country == "Asia Pacific Regions" && customData.CountryCode == "*" {
+		// 	countryCode = "HK"
+		// }
+		// if countryCode == "*" {  
+		if customData.CountryCode == "*" {  
 			// country == "*" && 
 			// 未知国家归入 XX
 			countryCode = "XX"
@@ -425,6 +515,7 @@ func (this *IPIPExchange) ExchangeIPIP() {
 	}
 	// log.Infof("---- over: total len= %d",total)
 	csvWriter.Flush()
+	csvCustomWriter.Flush()
 	csvCNWriter.Flush()
 	log.Errorf("---- total: len = %v",total)
 }
@@ -713,7 +804,7 @@ func (this *IPIPExchange) CheckIPIPChina() {
 func main(){
 	log.Info("----- begin -----")
 	log.Infof("opts: %v",opts)
-
+	GetJsonConfig("./country.json")
 	app := NewExchange(opts.OutPut,opts.InPut,opts.Filter)
 	// app.Exchange()
 	if opts.Type == "ipmask" {
