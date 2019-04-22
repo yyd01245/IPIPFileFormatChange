@@ -38,6 +38,15 @@ static bool isValidMask(unsigned int mask)
         return false;
 }
 
+
+const string JType = "1000";
+
+const string GlobalType = "100";
+
+// const int ChinaType = 100;
+
+
+
 class IPIPFileFormatChange {
     public:
         IPIPFileFormatChange(const char* file_path,const char* file_param);
@@ -203,7 +212,7 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<DataInfo_t>& 
         /* 将纯大写的中国运营商改为首先大写的样式 */
 
         transform((*it).isp.begin(), (*it).isp.end(), (*it).isp.begin(), towupper);
-        #ifdef OLD_CODE
+        // #ifdef OLD_CODE
           // ipip 转换使用
           if((*it).isp == "CHINATELECOM") {
               (*it).isp = "ctn";
@@ -212,7 +221,7 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<DataInfo_t>& 
           } else if ((*it).isp == "CHINAMOBILE" || (*it).isp == "CHINARAILCOM"){
               (*it).isp = "cmn";         
           }
-        #endif
+        // #endif
 
         // if((*it).isp == "CHINATELECOM") {
         //     transform((*it).isp.begin(), (*it).isp.end(), (*it).isp.begin(), towlower);
@@ -227,7 +236,7 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<DataInfo_t>& 
         //     (*it).isp.replace(0,1,"C");
         //     (*it).isp.replace(5,1,"M");            
         // }
-        #ifdef OLD_CODE
+        // #ifdef OLD_CODE
           // ipip 转换使用
           /* 运营商修改，将符合标准的运营商修改为 BGP */
           if((*it).isp.rfind("ALIYUN") != string::npos ||
@@ -246,23 +255,36 @@ void IPIPFileFormatChange::Write2DstFile(fstream &out_file, vector<DataInfo_t>& 
           (*it).isp == "*") {
               (*it).isp = "BGP";
           }
-        #endif
+        // #endif
         // out_file
         // <<Int2Ip((*it).begin_int_ipaddr)<<"\t"
         // <<Int2Ip((*it).end_int_ipaddr)<<"\t"
         // <<(*it).isp<<"\t"
         // <<(*it).cN<<"\r\n";
+        // 过滤掉多余的
+        if ((*it).cidr == "0.0.0.0/8" || 
+            (*it).cidr == "224.0.0.0/3" ||
+            (*it).cidr == "169.254.0.0/16") {
+            cout<< "ignor local cidr:"<<(*it).cidr<<endl;
+        }
 
         if ((*it).cN == "CN") {
-          out_china_file_
-          <<(*it).cidr<<SEPARATOR
-          // <<(*it).isp<<SEPARATOR
-          <<"C"<<"\r\n";
+            string out_data = "1";
+            if ((*it).isp == "cun") {
+                out_data = "2";
+            }else if ((*it).isp == "cmn") {
+                out_data = "3";
+            }
+            out_china_file_
+                <<(*it).cidr<<SEPARATOR
+                // <<(*it).isp<<SEPARATOR
+                <<out_data<<"\r\n";
         }else {
           out_file_
-          <<(*it).cidr<<SEPARATOR
-          // <<(*it).isp<<SEPARATOR
-          <<"G"<<"\r\n";
+            <<(*it).cidr<<SEPARATOR
+            // <<(*it).isp<<SEPARATOR
+            <<GlobalType<<"\r\n";
+            // <<"10"<<"\r\n";
         }
         #ifdef OLD_CODE
           // ipip 转换使用
